@@ -9,17 +9,15 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { toast } from "react-toastify";
-import { getUserSealedPoints, registerSealPoint } from "./sealPointsService";
 
 const Dashboard = () => {
   const [towns, setTowns] = useState([]);
   const [sealPoints, setSealPoints] = useState({});
-  const [sealedPoints, setSealedPoints] = useState({}); // Puntos sellados por usuario
   const [loading, setLoading] = useState(true);
   const [activeAccordion, setActiveAccordion] = useState(null); // Estado para el acordeón activo
   const [codeInput, setCodeInput] = useState("");
 
-  // Cargar lista de pueblos, puntos de sellado y puntos específicos del usuario
+  // Cargar lista de pueblos y puntos de sellado
   useEffect(() => {
     const fetchTowns = async () => {
       try {
@@ -43,10 +41,6 @@ const Dashboard = () => {
           }));
         }
         setSealPoints(sealPointsData);
-
-        // Cargar los puntos sellados del usuario actual
-        const userSealedPoints = await getUserSealedPoints();
-        setSealedPoints(userSealedPoints);
       } catch (error) {
         console.error("Error al cargar datos:", error);
         toast.error("No se pudieron cargar los datos.");
@@ -58,14 +52,23 @@ const Dashboard = () => {
     fetchTowns();
   }, []);
 
+  // Manejar el registro del punto de sellado
   const handleSealPointRegistration = async (sealPoint, townId) => {
     if (codeInput === sealPoint.code) {
       try {
-        // Registrar el punto de sellado para el usuario actual
-        await registerSealPoint(sealPoint.id);
+        // Actualizar el punto de sellado en Firestore
+        await updateDoc(doc(db, "sealPoints", sealPoint.id), {
+          completed: true,
+        });
 
         // Actualizar el estado local
-        setSealedPoints((prev) => ({ ...prev, [sealPoint.id]: true }));
+        setSealPoints((prevSealPoints) => ({
+          ...prevSealPoints,
+          [townId]: prevSealPoints[townId].map((point) =>
+            point.id === sealPoint.id ? { ...point, completed: true } : point
+          ),
+        }));
+
         toast.success(`Punto de sellado registrado: ${sealPoint.title}`);
       } catch (error) {
         console.error("Error al registrar el punto de sellado:", error);
@@ -77,10 +80,11 @@ const Dashboard = () => {
     setCodeInput(""); // Limpia el campo después del intento
   };
 
+  // Verificar si un pueblo está completado
   const isTownCompleted = (townId) => {
     return (
       sealPoints[townId]?.length > 0 &&
-      sealPoints[townId].every((point) => sealedPoints[point.id])
+      sealPoints[townId].every((point) => point.completed)
     );
   };
 
@@ -142,14 +146,14 @@ const Dashboard = () => {
                     {sealPoints[town.id].map((sealPoint) => (
                       <li
                         className={`list-group-item d-flex justify-content-between align-items-start mt-5 ${
-                          sealedPoints[sealPoint.id] ? "bg-light text-success" : ""
+                          sealPoint.completed ? "bg-light text-success" : ""
                         }`}
                         key={sealPoint.id}
                       >
                         <div className="ms-2 me-auto ">
                           <div className="fw-bold">
                             {sealPoint.title}{" "}
-                            {sealedPoints[sealPoint.id] && (
+                            {sealPoint.completed && (
                               <span className="badge bg-success ms-2">
                                 Completado
                               </span>
@@ -157,7 +161,8 @@ const Dashboard = () => {
                           </div>
                           <p>{sealPoint.description}</p>
                           <small>
-                            Horario: {sealPoint.openingHour} - {sealPoint.closingHour}
+                            Horario: {sealPoint.openingHour} -{" "}
+                            {sealPoint.closingHour}
                           </small>
                         </div>
                         <div className="d-flex flex-column align-items-end">
@@ -169,7 +174,7 @@ const Dashboard = () => {
                           >
                             Cómo llegar
                           </a>
-                          {!sealedPoints[sealPoint.id] && (
+                          {!sealPoint.completed && (
                             <div className="d-flex">
                               <input
                                 type="text"
@@ -182,7 +187,10 @@ const Dashboard = () => {
                               <button
                                 className="btn btn-success btn-sm"
                                 onClick={() =>
-                                  handleSealPointRegistration(sealPoint, town.id)
+                                  handleSealPointRegistration(
+                                    sealPoint,
+                                    town.id
+                                  )
                                 }
                               >
                                 Registrar
