@@ -24,7 +24,7 @@ const AdminRoute = ({ children }) => {
 
   // Si el usuario no está logueado o no es el admin
   if (!isAdmin) {
-    return <Navigate to="/login" />;
+    return <Navigate to="/" />;
   }
 
   // Si es el admin, mostramos el contenido protegido
